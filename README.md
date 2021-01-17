@@ -1,0 +1,3 @@
+# data_generate
+according_real_generate 是根据实际小区位置生成的
+generateData是随机数生成
