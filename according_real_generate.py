@@ -17,7 +17,7 @@ ee = 0.00669342162296594323  # 扁率
 URL_GAODE_API= 'https://restapi.amap.com/v3/geocode/geo?'
 
 def main():
-    # TODO 1. 读取文件lianjia_hz.xls 中的小区名 并存与 neighbour_name_list中
+    #  1. 读取文件lianjia_hz.xls 中的小区名 并存与 neighbour_name_list中
     file_name = "lianjia_hz.xls"
     readbook = xlrd.open_workbook(file_name)
     sheet = readbook.sheet_by_index(0)
@@ -28,13 +28,13 @@ def main():
         neighbour_dict[name[6:-1]] = 1
     neighbour_name_list = list(neighbour_dict.keys())
 
-    # TODO 2. 读取经纬度，在第一次读完以后存储到 "校区经纬坐标.json"文件中，下次可以直接读取使用
+    #  2. 读取经纬度，在第一次读完以后存储到 "校区经纬坐标.json"文件中，下次可以直接读取使用
     # get_jinweidu(neighbour_name_list)
 
     # with open('小区经纬坐标.json', 'r', encoding='utf8')as fp:
     #     location_Dictionary = json.load(fp)
 
-    # TODO 3. 将高德地图的火星坐标转化为正常坐标
+    #  3. 将高德地图的火星坐标转化为正常坐标
     # location_Dictionary_new = {}
     # for i in range(len(neighbour_name_list)):
     #     try:
@@ -45,7 +45,7 @@ def main():
     # with open("纠偏小区经纬坐标.json", "w", encoding='utf-8') as f:
     #     f.write(json.dumps(location_Dictionary, ensure_ascii=False, indent=4, separators=(',', ':')))
 
-    # TODO 4. 生成距离矩阵
+    #  4. 生成距离矩阵
     # 4.1 经纬度获得
     with open('纠偏小区经纬坐标.json', 'r', encoding='utf-8') as f:
         location_Dictionary = json.load(f)
@@ -56,22 +56,31 @@ def main():
     # distance_list = get_distance(len(lon_lat_list), list(lon_lat_list))
     # print(distance_list)
 
-    # TODO 5. 干垃圾、湿垃圾 demand
+    # 5. 干垃圾、湿垃圾 demand
     dry_demand_list = demand_generate(num, 2, 1)
     wet_demand_list = demand_generate(num, 1, 0.5)
 
-    # TODO 6. time windows
+    #  6. time windows
     time_window_list = time_window_generate(num)
-    # TODO 7. service time
+    #  7. service time
     service_time_list = np.random.randint(15, 30, num)
 
     # TODO 8. VEHICLE DATA
-    car_depot = np.random.uniform(0, num, 4)
-
-
+    # 8.1 车场经纬度
+    car_depot = np.random.randint(0, num, 4) # 找四个校区区位置作为车场的depot
+    car_list = []
+    random.seed(1)
+    car_capacity = [5, 10, 15]  # 假设车辆有 5吨 10吨 15吨 的3种类型
+    car_cost = [5, 7, 9]
+    for i in car_depot:
+        for j in range(len(car_capacity)):
+            car_number = np.random.randint(25, 35, 3)
+            car_list.append([lon_lat_list[i][0], lon_lat_list[i][1], car_number[0], car_capacity[j], car_cost[0]])  # 车场经纬度，车数量， 车的能力， 车的费用
+            car_list.append([lon_lat_list[i][0], lon_lat_list[i][1], car_number[1], car_capacity[j], car_cost[1]])
+            car_list.append([lon_lat_list[i][0], lon_lat_list[i][1], car_number[2], car_capacity[j], car_cost[2]])
 
     # TODO 9. 存储数据
-    store_data('C101.txt', num, 4,
+    store_data('C101.txt', num, car_list,
                lon_lat_list, dry_demand_list, wet_demand_list, time_window_list, service_time_list)
 
 
@@ -207,16 +216,15 @@ def time_window_generate(num: int, end_time=1020, station_percentage = 0.6,tw_pe
     time_window_list.sort(key=lambda x: x[0])
     return time_window_list
 
-def store_data(file_name, num: int, capacity: int, lat_lon_gauss_list, dry_demand_list, wet_demand_list, time_window_list, service_time_list):
+def store_data(file_name, num: int, car_list, lat_lon_gauss_list, dry_demand_list, wet_demand_list, time_window_list, service_time_list):
     f = open(file_name, mode='w')
     f.write('DATA')
     f.write('\n')
     f.write('\nVEHICLE\n')
     f.write('ID\tLON\tLAT\tNUMBER\tCAPACITY\tCOST\n')
-    f.write(' ')
-    f.write(str(num))
-    f.write(' ')
-    f.write(str(capacity))
+    for i in range(len(car_list)):
+        f.write('%d\t%f\t%f\t%d\t%f\t%d\n' % (i+1, car_list[i][0], car_list[i][1], car_list[i][2], car_list[i][3], car_list[i][4]))
+
     f.write('\n')
     f.write('\nCUSTOMER\n')
     # f.write('CUST LAT\tLON\tDEMAND\tSTART_TIME\tEND_TIME\tSETVICE_TIME\n')
@@ -227,7 +235,7 @@ def store_data(file_name, num: int, capacity: int, lat_lon_gauss_list, dry_deman
     f.write('ID\tLON\tLAT\tDRY_DEMAND\tWET_DEMAND\tSTART_TIME\tEND_TIME\tSETVICE_TIME\tCAR_NUM\tSTATION_TYPE\n\n')
     # f.write('0 0 0 0 0 1920 0\n')
     for i in range(num):
-        f.write('%d\t%f\t%f\t%f\t%f\t%d\t%d\t%d\t%d\t%d\n' % (i+1, lat_lon_gauss_list[i][0], lat_lon_gauss_list[i][1], dry_demand_list[i], wet_demand_list[i], time_window_list[i][1], time_window_list[i][2], service_time_list[i], time_window_list[i][3], time_window_list[i][3]))
+        f.write('%d\t%f\t%f\t%f\t%f\t%d\t%d\t%d\t%d\t%d\n' % (i+1, lat_lon_gauss_list[i][0], lat_lon_gauss_list[i][1], dry_demand_list[i], wet_demand_list[i], time_window_list[i][1], time_window_list[i][2], service_time_list[i], time_window_list[i][3], time_window_list[i][4]))
 
     f.close()
 
