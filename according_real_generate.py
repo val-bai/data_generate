@@ -10,6 +10,13 @@ from random import shuffle
 import random
 import pandas as pd
 
+random.seed(1)
+LAT_LOW = 29.183
+LAT_HIGH = 30.55
+LAT_MEANS = 30.267
+LON_LOW = 118.35
+LON_HIGH = 120.5
+LON_MEANS = 120.2
 x_pi = 3.14159265358979324 * 3000.0 / 180.0
 pi = 3.1415926535897932384626  # π
 a = 6378245.0  # 长半轴
@@ -49,40 +56,94 @@ def main():
     # 4.1 经纬度获得
     with open('纠偏小区经纬坐标.json', 'r', encoding='utf-8') as f:
         location_Dictionary = json.load(f)
-    num = len(location_Dictionary)
+
+    # 4.2 由于小区数量为3000左右， 而算例要1w左右， 故在此随机生成7000个算例
     lon_lat_list = list(location_Dictionary.values())
+    lon_lat_gauss_list = gauss_gen(7000)
+    for i in range(len(lon_lat_gauss_list)):
+        lon_lat_list.append(lon_lat_gauss_list[i])
+
+    num = len(lon_lat_list)
     # for i in range(len(lon_lat_list)):
     #     lon_lat_list[i][0], lon_lat_list[i][1] = lon_lat_list[i][1], lon_lat_list[i][0]
     # distance_list = get_distance(len(lon_lat_list), list(lon_lat_list))
     # print(distance_list)
 
     # 5. 干垃圾、湿垃圾 demand
-    dry_demand_list = demand_generate(num, 2, 1)
-    wet_demand_list = demand_generate(num, 1, 0.5)
+    dry_demand_list = demand_generate(num, 0.45, 0.02)
+    wet_demand_list = demand_generate(num, 0.3, 0.01)
 
     #  6. time windows
     time_window_list = time_window_generate(num)
     #  7. service time
     service_time_list = np.random.randint(15, 30, num)
 
-    # TODO 8. VEHICLE DATA
+    #  8. VEHICLE DATA
     # 8.1 车场经纬度
     car_depot = np.random.randint(0, num, 4) # 找四个校区区位置作为车场的depot
     car_list = []
-    random.seed(1)
     car_capacity = [5, 10, 15]  # 假设车辆有 5吨 10吨 15吨 的3种类型
     car_cost = [5, 7, 9]
     for i in car_depot:
         for j in range(len(car_capacity)):
-            car_number = np.random.randint(25, 35, 3)
+            car_number = np.random.randint(90, 110, 3)
             car_list.append([lon_lat_list[i][0], lon_lat_list[i][1], car_number[0], car_capacity[j], car_cost[0]])  # 车场经纬度，车数量， 车的能力， 车的费用
             car_list.append([lon_lat_list[i][0], lon_lat_list[i][1], car_number[1], car_capacity[j], car_cost[1]])
             car_list.append([lon_lat_list[i][0], lon_lat_list[i][1], car_number[2], car_capacity[j], car_cost[2]])
 
-    # TODO 9. 存储数据
-    store_data('C101.txt', num, car_list,
-               lon_lat_list, dry_demand_list, wet_demand_list, time_window_list, service_time_list)
+    #  9. 减量综合体
+    # 只有一个， 用75%分位数作为减量综合体位置，保证其相对偏远，作业能力小于所有垃圾总量和，成本由于要优先满足减量综合体故设为0
+    zonghe_depot = []
+    df = pd.DataFrame(lon_lat_list)
+    # print(df.describe().loc['75%'][0])
+    # dry_demand_sum = np.sum(dry_demand_list)
+    # wet_demand_sum = np.sum(wet_demand_list)
+    # print(dry_demand_sum, wet_demand_sum)
+    zonghe_depot = [df.describe().loc['75%'][0], df.describe().loc['75%'][1], 800, 0]
 
+    # TODO 10. 处理厂
+    # 在此将用最大经纬度或最小经纬度作为其位置，保证处理厂的偏僻，处理厂有填埋、焚烧、餐厨3种，对前两种不设置能力限制，第三种设置能力限制。
+    final_depot = []
+    final_depot.append([df.describe().loc['max'][0] + 0.1, df.describe().loc['max'][1] + 0.1, 999999])
+    final_depot.append([df.describe().loc['max'][0] + 0.1, df.describe().loc['min'][1] - 0.1, 999999])
+    final_depot.append([df.describe().loc['min'][0] - 0.1, df.describe().loc['max'][1] + 0.1, 1000])
+
+    # TODO 11. 存储数据
+    store_data('C101.txt', num, car_list,
+               lon_lat_list, dry_demand_list, wet_demand_list, time_window_list, service_time_list, zonghe_depot, final_depot)
+
+
+
+def gauss_gen(num: int):
+    '''
+    :param num: 生成经纬度个数
+    :return: 经纬度二维数组
+    '''
+    # 经度生成，并锁定范围
+    lon_list = []
+    i = 0
+    while(i < num):
+        lon_num = np.random.normal(LON_MEANS, 0.05)
+        if(lon_num > LON_HIGH or lon_num < LON_LOW):
+            i = i - 1
+            continue
+        lon_list.append(lon_num)
+        i += 1
+    # 纬度生成，并锁定范围
+    lat_list = []
+    i = 0
+    while(i < num):
+        lat_num = np.random.normal(LAT_MEANS, 0.05)
+        if(lat_num > LAT_HIGH or lat_num < LAT_LOW):
+            i = i - 1
+            continue
+        lat_list.append(lat_num)
+        i += 1
+    # 合并经纬度
+    lon_lat_list = []
+    for i in range(num):
+        lon_lat_list.append([lon_list[i], lat_list[i]])
+    return lon_lat_list
 
 def get_jinweidu(neighbour_name_list):
     par = {
@@ -198,7 +259,6 @@ def time_window_generate(num: int, end_time=1020, station_percentage = 0.6,tw_pe
     :param percentage:
     :return:
     '''
-    random.seed(1)
     temp_list = [i for i in range(num)]
     shuffle(temp_list)
     tw_station_num = int(num * station_percentage * tw_percentage)  # 清运点拥有时间窗的站点
@@ -216,16 +276,17 @@ def time_window_generate(num: int, end_time=1020, station_percentage = 0.6,tw_pe
     time_window_list.sort(key=lambda x: x[0])
     return time_window_list
 
-def store_data(file_name, num: int, car_list, lat_lon_gauss_list, dry_demand_list, wet_demand_list, time_window_list, service_time_list):
+def store_data(file_name, num: int, car_list, lat_lon_gauss_list, dry_demand_list, wet_demand_list, time_window_list, service_time_list, zonghe_depot, final_depot):
     f = open(file_name, mode='w')
     f.write('DATA')
     f.write('\n')
+    # 车辆的信息
     f.write('\nVEHICLE\n')
     f.write('ID\tLON\tLAT\tNUMBER\tCAPACITY\tCOST\n')
     for i in range(len(car_list)):
         f.write('%d\t%f\t%f\t%d\t%f\t%d\n' % (i+1, car_list[i][0], car_list[i][1], car_list[i][2], car_list[i][3], car_list[i][4]))
-
     f.write('\n')
+    # 各个中转站、清运站的相关信息
     f.write('\nCUSTOMER\n')
     # f.write('CUST LAT\tLON\tDEMAND\tSTART_TIME\tEND_TIME\tSETVICE_TIME\n')
     # f.write('0 0 0 0\t0\t1020\t0\n')
@@ -236,7 +297,15 @@ def store_data(file_name, num: int, car_list, lat_lon_gauss_list, dry_demand_lis
     # f.write('0 0 0 0 0 1920 0\n')
     for i in range(num):
         f.write('%d\t%f\t%f\t%f\t%f\t%d\t%d\t%d\t%d\t%d\n' % (i+1, lat_lon_gauss_list[i][0], lat_lon_gauss_list[i][1], dry_demand_list[i], wet_demand_list[i], time_window_list[i][1], time_window_list[i][2], service_time_list[i], time_window_list[i][3], time_window_list[i][4]))
-
+    # 减量综合体的信息
+    f.write('\nZONGHE\n')
+    f.write('ID\tLON\tLAT\tCAPACITY\tCOST\n')
+    f.write('%d\t%f\t%f\t%d\t%d\n' % (1, zonghe_depot[0], zonghe_depot[1], zonghe_depot[2], zonghe_depot[3]))
+    # 处理厂
+    f.write('\nCHULI\n')
+    f.write('ID\tLON\tLAT\tCAPACITY\n')
+    for i in range(len(final_depot)):
+        f.write('%d\t%f\t%f\t%d\n' % (i + 1, final_depot[i][0], final_depot[i][1], final_depot[i][2]))
     f.close()
 
 if __name__ == "__main__":
